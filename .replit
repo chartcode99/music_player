@@ -9,6 +9,16 @@ deploymentTarget = "autoscale"
 run = ["streamlit", "run", "app.py", "--server.port", "5000"]
 
 [workflows]
+runButton = "Flutter Run"
+
+[[workflows.workflow]]
+name = "Flutter Run"
+author = 44533292
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd ocr_extractor && flutter pub get && flutter run"
 
 [[ports]]
 localPort = 5000
