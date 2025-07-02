@@ -1,7 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+
 import 'package:permission_handler/permission_handler.dart';
+import 'package:just_audio/just_audio.dart';
 
 void main() {
   runApp(MyApp());
@@ -28,6 +30,7 @@ class MusicPlayerHome extends StatefulWidget {
 
 class _MusicPlayerHomeState extends State<MusicPlayerHome> {
   final OnAudioQuery _audioQuery = OnAudioQuery();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   List<SongModel> _songs = [];
   bool _hasPermission = false;
   int _currentIndex = 0;
@@ -53,6 +56,17 @@ class _MusicPlayerHomeState extends State<MusicPlayerHome> {
     setState(() {
       _songs = songs;
     });
+    if (songs.isNotEmpty) {
+      await _setAudioSource(songs[_currentIndex]);
+    }
+  }
+
+  Future<void> _setAudioSource(SongModel song) async {
+    try {
+      await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse(song.uri!)));
+    } catch (e) {
+      // Handle error
+    }
   }
 
   @override
@@ -277,6 +291,11 @@ class _MusicPlayerHomeState extends State<MusicPlayerHome> {
   }
 
   void _togglePlayPause() {
+    if (_isPlaying) {
+      _audioPlayer.pause();
+    } else {
+      _audioPlayer.play();
+    }
     setState(() {
       _isPlaying = !_isPlaying;
     });
@@ -287,6 +306,8 @@ class _MusicPlayerHomeState extends State<MusicPlayerHome> {
       setState(() {
         _currentIndex = (_currentIndex + 1) % _songs.length;
       });
+      _setAudioSource(_songs[_currentIndex]);
+      if (_isPlaying) _audioPlayer.play();
     }
   }
 
@@ -295,6 +316,9 @@ class _MusicPlayerHomeState extends State<MusicPlayerHome> {
       setState(() {
         _currentIndex = _currentIndex > 0 ? _currentIndex - 1 : _songs.length - 1;
       });
+      _setAudioSource(_songs[_currentIndex]);
+      if (_isPlaying) _audioPlayer.play();
     }
+    _audioPlayer.dispose();
   }
 }
