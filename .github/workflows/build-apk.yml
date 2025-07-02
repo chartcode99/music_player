@@ -15,46 +15,46 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
         java-version: '17'
-        
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
         flutter-version: '3.22.0'
         channel: 'stable'
-        
+
     - name: Flutter doctor
       working-directory: ./ocr_extractor
       run: flutter doctor -v
-        
+
     - name: Get Flutter dependencies
-      working-directory: ./ocr_extractor
+      working-directory: ./music
       run: flutter pub get
-      
+
     - name: Flutter clean
       working-directory: ./ocr_extractor
       run: flutter clean
-      
+
     - name: Build APK
-      working-directory: ./ocr_extractor
+      working-directory: ./music
       run: flutter build apk --release --no-shrink
-      
+
     - name: Upload APK as artifact
       uses: actions/upload-artifact@v4
       with:
         name: ocr-extractor-apk
         path: ocr_extractor/build/app/outputs/flutter-apk/app-release.apk
         retention-days: 30
-        
+
     - name: Create Release
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v1
@@ -63,18 +63,18 @@ jobs:
         name: OCR Number Extractor v${{ github.run_number }}
         body: |
           OCR Number Extractor Android App - Clean Build
-          
+
           ## Features
           - Offline OCR using Google ML Kit
           - Extract numbers (5+ digits) from images in ZIP folders
           - Clean, simple interface
           - Results export functionality
-          
+
           ## Installation
           1. Download APK file below
           2. Enable "Install from unknown sources" in Android settings
           3. Install APK on Android device
           4. Grant storage permissions when prompted
-          
+
         files: ocr_extractor/build/app/outputs/flutter-apk/app-release.apk
         github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -18,7 +18,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd ocr_extractor && flutter pub get && flutter run"
+args = "cd music && flutter pub get && flutter run"
 
 [[ports]]
 localPort = 5000
