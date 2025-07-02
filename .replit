@@ -1,0 +1,15 @@
+modules = ["python-3.11", "flutter"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["freetype", "hdf5", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "tcl", "tesseract", "tk", "zlib", "flutter", "android-tools", "openjdk11"]
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["streamlit", "run", "app.py", "--server.port", "5000"]
+
+[workflows]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
