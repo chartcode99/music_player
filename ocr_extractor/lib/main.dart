@@ -1,314 +1,302 @@
+
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:archive/archive.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
+
+
 
 void main() {
-  runApp(const OCRApp());
+  runApp(const MusicPlayerApp());
 }
 
-class OCRApp extends StatelessWidget {
-  const OCRApp({super.key});
+
+class MusicPlayerApp extends StatelessWidget {
+  const MusicPlayerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OCR Number Extractor',
+      title: 'Music Player',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const OCRHomePage(),
+      home: const SongListPage(),
     );
   }
 }
 
-class OCRHomePage extends StatefulWidget {
-  const OCRHomePage({super.key});
+
+
+
+class SongListPage extends StatefulWidget {
+  const SongListPage({super.key});
 
   @override
-  State<OCRHomePage> createState() => _OCRHomePageState();
+  State<SongListPage> createState() => _SongListPageState();
 }
 
-class _OCRHomePageState extends State<OCRHomePage> {
-  final TextRecognizer _textRecognizer = TextRecognizer();
-  List<File> _imageFiles = [];
-  bool _isProcessing = false;
-  String _status = '';
-  List<String> _results = [];
+class _SongListPageState extends State<SongListPage> {
+  final OnAudioQuery _audioQuery = OnAudioQuery();
+  List<SongModel> _songs = [];
+  int? _currentIndex;
+  bool _isPlaying = false;
+  bool _loading = true;
 
   @override
-  void dispose() {
-    _textRecognizer.close();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _requestPermissionAndQuery();
   }
 
-  Future<void> _requestPermissions() async {
-    await Permission.storage.request();
-    if (Platform.isAndroid) {
-      await Permission.manageExternalStorage.request();
+  Future<void> _requestPermissionAndQuery() async {
+    var status = await Permission.storage.status;
+    if (!status.isGranted) {
+      await Permission.storage.request();
     }
-  }
-
-  Future<void> _pickZipFile() async {
-    await _requestPermissions();
-    
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
-
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _isProcessing = true;
-        _status = 'Extracting images...';
-      });
-
-      try {
-        await _extractImages(result.files.single.path!);
-        await _processImages();
-      } catch (e) {
-        _showError('Error: $e');
-      }
-
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  Future<void> _extractImages(String zipPath) async {
-    final bytes = await File(zipPath).readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes);
-    final tempDir = await getTemporaryDirectory();
-    
-    List<File> imageFiles = [];
-    
-    for (final file in archive) {
-      if (file.isFile) {
-        final name = file.name.toLowerCase();
-        if (name.endsWith('.jpg') || name.endsWith('.jpeg') || 
-            name.endsWith('.png') || name.endsWith('.bmp') || 
-            name.endsWith('.tiff') || name.endsWith('.webp')) {
-          
-          final data = file.content as List<int>;
-          final imageFile = File('${tempDir.path}/${file.name}');
-          await imageFile.create(recursive: true);
-          await imageFile.writeAsBytes(data);
-          imageFiles.add(imageFile);
-        }
-      }
-    }
-    
+    List<SongModel> songs = await _audioQuery.querySongs();
     setState(() {
-      _imageFiles = imageFiles;
+      _songs = songs;
+      _loading = false;
     });
   }
 
-  Future<void> _processImages() async {
-    if (_imageFiles.isEmpty) return;
-    
-    List<String> results = [];
-    
-    for (int i = 0; i < _imageFiles.length; i++) {
-      setState(() {
-        _status = 'Processing ${i + 1}/${_imageFiles.length}...';
-      });
-      
-      try {
-        final filename = _imageFiles[i].path.split('/').last;
-        final numbers = await _extractNumbers(_imageFiles[i]);
-        results.add('$filename $numbers');
-      } catch (e) {
-        final filename = _imageFiles[i].path.split('/').last;
-        results.add('$filename [Error]');
-      }
-    }
-    
+  void _playSong(int index) {
     setState(() {
-      _results = results;
+      _currentIndex = index;
+      _isPlaying = true;
     });
-    
-    _showResults();
-  }
-
-  Future<String> _extractNumbers(File imageFile) async {
-    final inputImage = InputImage.fromFile(imageFile);
-    final recognizedText = await _textRecognizer.processImage(inputImage);
-    
-    final RegExp numberRegex = RegExp(r'\d+');
-    final matches = numberRegex.allMatches(recognizedText.text);
-    
-    List<String> longNumbers = [];
-    for (final match in matches) {
-      final number = match.group(0)!;
-      if (number.length > 5) {
-        longNumbers.add(number);
-      }
-    }
-    
-    return longNumbers.isNotEmpty ? longNumbers.join(' ') : '[No numbers]';
-  }
-
-  void _showResults() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Results'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: SingleChildScrollView(
-            child: Text(_results.join('     ')),
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NowPlayingPage(
+          song: _songs[index],
+          isPlaying: _isPlaying,
+          onPlayPause: _togglePlayPause,
+          onNext: _playNext,
+          onPrev: _playPrev,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: _saveResults,
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
 
-  Future<void> _saveResults() async {
-    try {
-      final directory = await getExternalStorageDirectory();
-      if (directory != null) {
-        final file = File('${directory.path}/ocr_results.txt');
-        await file.writeAsString(_results.join('     '));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Saved to ${file.path}')),
-          );
-        }
-      }
-    } catch (e) {
-      _showError('Save error: $e');
-    }
+  void _togglePlayPause() {
+    setState(() {
+      _isPlaying = !_isPlaying;
+    });
   }
 
-  void _showError(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  void _playNext() {
+    if (_currentIndex == null || _songs.isEmpty) return;
+    int next = (_currentIndex! + 1) % _songs.length;
+    _playSong(next);
+  }
+
+  void _playPrev() {
+    if (_currentIndex == null || _songs.isEmpty) return;
+    int prev = (_currentIndex! - 1 + _songs.length) % _songs.length;
+    _playSong(prev);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OCR Number Extractor'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('Songs'),
+        backgroundColor: Colors.black,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _songs.isEmpty
+              ? const Center(child: Text('No songs found', style: TextStyle(color: Colors.white)))
+              : Stack(
+                  children: [
+                    ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: _songs.length,
+                      itemBuilder: (context, index) {
+                        final song = _songs[index];
+                        return ListTile(
+                          leading: QueryArtworkWidget(
+                            id: song.id,
+                            type: ArtworkType.AUDIO,
+                            nullArtworkWidget: const CircleAvatar(child: Icon(Icons.music_note)),
+                          ),
+                          title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          subtitle: Text('${song.artist ?? "Unknown"} | ${song.album ?? "Unknown"}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onTap: () => _playSong(index),
+                          trailing: _currentIndex == index && _isPlaying
+                              ? Icon(Icons.equalizer, color: Colors.blue)
+                              : null,
+                        );
+                      },
+                    ),
+                    if (_currentIndex != null)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: MiniPlayerBar(
+                          song: _songs[_currentIndex!],
+                          isPlaying: _isPlaying,
+                          onTap: () => _playSong(_currentIndex!),
+                          onPlayPause: _togglePlayPause,
+                        ),
+                      ),
+                  ],
+                ),
+      backgroundColor: Colors.black,
+    );
+  }
+}
+
+
+class MiniPlayerBar extends StatelessWidget {
+  final SongModel song;
+  final bool isPlaying;
+  final VoidCallback onTap;
+  final VoidCallback onPlayPause;
+  const MiniPlayerBar({required this.song, required this.isPlaying, required this.onTap, required this.onPlayPause, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      color: Colors.grey[900],
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              QueryArtworkWidget(
+                id: song.id,
+                type: ArtworkType.AUDIO,
+                artworkBorder: BorderRadius.circular(24),
+                nullArtworkWidget: const CircleAvatar(child: Icon(Icons.music_note)),
+                artworkHeight: 48,
+                artworkWidth: 48,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'OCR Number Extractor',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Extract numbers (5+ digits) from images in ZIP folders',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('How it works:'),
-                    const Text('1. Select ZIP file with images'),
-                    const Text('2. Extract numbers with 5+ digits'),
-                    const Text('3. Save results in specified format'),
+                    Text(song.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(song.artist ?? 'Unknown', style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            if (_isProcessing)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(_status),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ElevatedButton.icon(
-                onPressed: _pickZipFile,
-                icon: const Icon(Icons.folder_zip),
-                label: const Text('Select ZIP File'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.all(16),
-                ),
+              IconButton(
+                icon: Icon(isPlaying ? Icons.pause_circle : Icons.play_circle, color: Colors.white, size: 32),
+                onPressed: onPlayPause,
               ),
-            const SizedBox(height: 20),
-            if (_imageFiles.isNotEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Found ${_imageFiles.length} images',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            if (_results.isNotEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Processing Complete!',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Processed ${_results.length} images'),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: _showResults,
-                        child: const Text('View Results'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class NowPlayingPage extends StatefulWidget {
+  final SongModel song;
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+  final VoidCallback onNext;
+  final VoidCallback onPrev;
+  const NowPlayingPage({required this.song, required this.isPlaying, required this.onPlayPause, required this.onNext, required this.onPrev, super.key});
+
+  @override
+  State<NowPlayingPage> createState() => _NowPlayingPageState();
+}
+
+class _NowPlayingPageState extends State<NowPlayingPage> {
+  double _progress = 0.1;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(icon: const Icon(Icons.equalizer, color: Colors.white), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.more_vert, color: Colors.white), onPressed: () {}),
+        ],
+      ),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 20),
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: QueryArtworkWidget(
+                id: widget.song.id,
+                type: ArtworkType.AUDIO,
+                artworkHeight: 260,
+                artworkWidth: 260,
+                nullArtworkWidget: Container(
+                  width: 260,
+                  height: 260,
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.music_note, size: 100, color: Colors.white38),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(widget.song.title, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Text(widget.song.artist ?? 'Unknown', style: const TextStyle(color: Colors.white70, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 8),
+          Text(widget.song.album ?? 'Unknown', style: const TextStyle(color: Colors.white38, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 24),
+          Slider(
+            value: _progress,
+            onChanged: (v) => setState(() => _progress = v),
+            min: 0,
+            max: 1,
+            activeColor: Colors.blue,
+            inactiveColor: Colors.white24,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(_formatDuration(Duration(seconds: ((widget.song.duration ?? 0) * _progress ~/ 1000))), style: const TextStyle(color: Colors.white54)),
+                Text(_formatDuration(Duration(milliseconds: widget.song.duration ?? 0)), style: const TextStyle(color: Colors.white54)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(icon: const Icon(Icons.skip_previous, color: Colors.white, size: 36), onPressed: widget.onPrev),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: Icon(widget.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: Colors.white, size: 64),
+                onPressed: widget.onPlayPause,
+              ),
+              const SizedBox(width: 16),
+              IconButton(icon: const Icon(Icons.skip_next, color: Colors.white, size: 36), onPressed: widget.onNext),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Text('No lyrics', style: TextStyle(color: Colors.white38)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds % 60)}';
+  }
+}
 }
