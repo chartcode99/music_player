@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 permissions:
@@ -7,7 +8,7 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - 'ocr_extractor/**'
+      - 'music/**'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -33,7 +34,7 @@ jobs:
         channel: 'stable'
 
     - name: Flutter doctor
-      working-directory: ./ocr_extractor
+      working-directory: ./music
       run: flutter doctor -v
 
     - name: Get Flutter dependencies
@@ -41,7 +42,7 @@ jobs:
       run: flutter pub get
 
     - name: Flutter clean
-      working-directory: ./ocr_extractor
+      working-directory: ./music
       run: flutter clean
 
     - name: Build APK
@@ -51,8 +52,8 @@ jobs:
     - name: Upload APK as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ocr-extractor-apk
-        path: ocr_extractor/build/app/outputs/flutter-apk/app-release.apk
+        name: music-player-apk
+        path: music/build/app/outputs/flutter-apk/app-release.apk
         retention-days: 30
 
     - name: Create Release
@@ -60,15 +61,15 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.run_number }}
-        name: OCR Number Extractor v${{ github.run_number }}
+        name: Music Player v${{ github.run_number }}
         body: |
-          OCR Number Extractor Android App - Clean Build
+          Music Player Android App - Release Build
 
           ## Features
-          - Offline OCR using Google ML Kit
-          - Extract numbers (5+ digits) from images in ZIP folders
-          - Clean, simple interface
-          - Results export functionality
+          - Clean, modern music player interface
+          - Local music file playback
+          - Beautiful UI design
+          - Smooth performance
 
           ## Installation
           1. Download APK file below
@@ -76,5 +77,5 @@ jobs:
           3. Install APK on Android device
           4. Grant storage permissions when prompted
 
-        files: ocr_extractor/build/app/outputs/flutter-apk/app-release.apk
+        files: music/build/app/outputs/flutter-apk/app-release.apk
         github_token: ${{ secrets.GITHUB_TOKEN }}
